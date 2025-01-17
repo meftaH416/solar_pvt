@@ -5,8 +5,6 @@
 
 # frozen_string_literal: true
 
-require 'csv'
-
 class AddPVT < OpenStudio::Measure::ModelMeasure
 
   def name
@@ -24,6 +22,7 @@ class AddPVT < OpenStudio::Measure::ModelMeasure
   def arguments(model)
     args = OpenStudio::Measure::OSArgumentVector.new
 
+    ## SolarCollector:FlatPlate:PhotovoltaicThermal
     # Name of the object
     obj_name = OpenStudio::Measure::OSArgument.makeStringArgument('obj_name', true)
     obj_name.setDisplayName('Uniquie Name for the PVT object')
@@ -41,6 +40,18 @@ class AddPVT < OpenStudio::Measure::ModelMeasure
     surf_name.setDisplayName('Surface Name')
     args << surf_name
 
+    # Name of the SolarCollectorPerformance object
+    per_name = OpenStudio::Measure::OSArgument.makeStringArgument('per_name', true)
+    per_name.setDisplayName('SolarCollectorPerformance:PhotovoltaicThermal Name')
+    per_name.setDefaultValue('Performance Obj')
+    args << per_name
+
+    # Photovoltaic Generator Name
+    generator_name = OpenStudio::Measure::OSArgument.makeStringArgument('generator_name', true)
+    generator_name.setDisplayName('Generator:Photovoltaic Name')
+    generator_name.setDefaultValue('Generator Obj')
+    args << generator_name
+
     # Working fluid type
     chs = OpenStudio::StringVector.new
     chs << "Water"
@@ -55,13 +66,7 @@ class AddPVT < OpenStudio::Measure::ModelMeasure
     wf_dfrate.setDefaultValue('Autosize')
     args << wf_dfrate
 
-    ## SolarCollectorPerformance
-    # Name of the object
-    per_name = OpenStudio::Measure::OSArgument.makeStringArgument('per_name', true)
-    per_name.setDisplayName('SolarCollectorPerformance:PhotovoltaicThermal Name')
-    per_name.setDefaultValue('Performance Obj')
-    args << per_name
-    
+    ## SolarCollectorPerformance:PhotovoltaicThermal:Simple
     # set fraction_of_surface
     fract_of_surface = OpenStudio::Measure::OSArgument.makeDoubleArgument('fract_of_surface', true)
     fract_of_surface.setDisplayName('Fraction of Surface Area with Active Thermal Collector')
