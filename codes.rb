@@ -178,7 +178,6 @@ class AddPVT < OpenStudio::Measure::ModelMeasure
     conversion_eff_val = runner.getDoubleArgumentValue('conversion_eff_val', user_arguments)
     pv_schedule_name = runner.getStringArgumentValue('pv_schedule_name', user_arguments)
 
-
     # Validate selected surface
     pvt_surface = model.getSurfaceByName(surf_name)
     if pvt_surface.empty?
@@ -211,7 +210,6 @@ class AddPVT < OpenStudio::Measure::ModelMeasure
     end
     gen_schedule = gen_schedule.get
 
-
     # Placeholder for creating a PVT object
     runner.registerInfo("Creating a PVT object named '#{obj_name}' on surface '#{surf_name}' using schedule '#{schedule_name}'.")
     # Placeholder for creating a PVT object
@@ -229,17 +227,10 @@ class AddPVT < OpenStudio::Measure::ModelMeasure
     pvt_object.setThermalWorkingFluidType(work_fluid)
     pvt_object.setDesignFlowRate(wf_design_flowrate)
 
-
     pvt_object_performance = pvt_object.SolarCollectorPerformancePhotovoltaicThermalSimple
     pvt_object_performance.setName(per_name)
 
-
-
-
     pvt_object.setPhotovoltaicName(generator_name)
-
-
-
 
     runner.registerFinalCondition("PVT object named '#{obj_name}' successfully added to surface '#{surf_name}' with schedule '#{schedule_name}'.")
 
