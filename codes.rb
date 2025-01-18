@@ -178,13 +178,14 @@ class AddPVT < OpenStudio::Measure::ModelMeasure
     conversion_eff_val = runner.getDoubleArgumentValue('conversion_eff_val', user_arguments)
     pv_schedule_name = runner.getStringArgumentValue('pv_schedule_name', user_arguments)
 
+
     # Validate selected surface
-    pvt_surface = model.getSurfaceByName(surf_name)
-    if pvt_surface.empty?
+    pvt_surfaces = model.getSurfaceByName(surf_name)
+    if pvt_surfaces.empty?
       runner.registerError("The selected surface '#{surf_name}' was not found in the model.")
       return false
     end
-    pvt_surface = pvt_surface.get
+    pvt_surface = pvt_surfaces.get
 
     # Validate selected schedule
     schedule = model.getScheduleByName(schedule_name)
@@ -210,6 +211,28 @@ class AddPVT < OpenStudio::Measure::ModelMeasure
     end
     gen_schedule = gen_schedule.get
 
+
+    # PlantLoop nodes
+    plant_loops = model.getPlantLoopByName("HTR WTR Loop")
+    if not plant_loops.empty?
+      plant_loop = plant_loops.get
+    end
+    plant_supply_out_node = plant_loop.supplyOutletNode
+    plant_supply_in_node = plant_loop.supplyInletNode
+    runner.registerInfo("The plantloop supply outlet nodes are #{plant_supply_out_node}")
+    runner.registerInfo("The plantloop supply inlet nodes are #{plant_supply_in_node}")
+
+    # Airloop nodes
+    air_loops = model.getAirLoopHVACByName("Packaged RTU1")
+    if not air_loops.empty?
+      air_loop = air_loops.get
+    end
+    air_supply_out_node = air_loop.supplyOutletNode
+    air_supply_in_node = air_loop.supplyInletNode
+    runner.registerInfo("The airloop supply outlet nodes are #{air_supply_out_node}")
+    runner.registerInfo("The airloop supply inlet nodes are #{air_supply_in_node}")
+
+
     # Placeholder for creating a PVT object
     runner.registerInfo("Creating a PVT object named '#{obj_name}' on surface '#{surf_name}' using schedule '#{schedule_name}'.")
     # Placeholder for creating a PVT object
@@ -222,15 +245,31 @@ class AddPVT < OpenStudio::Measure::ModelMeasure
     #https://openstudio-sdk-documentation.s3.amazonaws.com/cpp/OpenStudio-1.11.0-doc/utilities_idd/html/classopenstudio_1_1_solar_collector___flat_plate___photovoltaic_thermal_fields.html
     
     pvt_object = OpenStudio::Model::SolarCollectorFlatPlatePhotovoltaicThermal.new(model)
+    plant_loop.addSupplyBranchForComponent(pvt_object)
     pvt_object.setName(obj_name)
     pvt_object.setSurface(pvt_surface)
-    pvt_object.setThermalWorkingFluidType(work_fluid)
-    pvt_object.setDesignFlowRate(wf_design_flowrate)
+ 
+    # create the panel
+    panel = OpenStudio::Model::GeneratorPhotovoltaic.simple(model)
+    panel.setSurface(gen_surface)
+    # create the inverter
+    inverter = OpenStudio::Model::ElectricLoadCenterInverterSimple.new(model)
+    # create the distribution system
+    elcd = OpenStudio::Model::ElectricLoadCenterDistribution.new(model)
+    elcd.addGenerator(panel)
+    elcd.setInverter(inverter)
+    # Assign the PV Generator to the collector
+    pvt_object.setGeneratorPhotovoltaic(panel)
 
-    pvt_object_performance = pvt_object.SolarCollectorPerformancePhotovoltaicThermalSimple
+    pvt_object.autosizeDesignFlowRate
+
+
+    pvt_object_performance = pvt_object.solarCollectorPerformance.to_SolarCollectorPerformancePhotovoltaicThermalSimple.get
     pvt_object_performance.setName(per_name)
-
-    pvt_object.setPhotovoltaicName(generator_name)
+    pvt_object_performance.setFractionOfSurfaceAreaWithActiveThermalCollector(fract_of_surface)
+    # pvt_object_performance.setThermalConversionEﬀiciencyInputMode(therm_eff)
+    pvt_object_performance.setThermalConversionEfficiency(ther_eff_val)
+    pvt_object_performance.setFrontSurfaceEmittance(fron_surf_emittance)
 
     runner.registerFinalCondition("PVT object named '#{obj_name}' successfully added to surface '#{surf_name}' with schedule '#{schedule_name}'.")
 
