@@ -116,10 +116,10 @@ class AddPVT < OpenStudio::Measure::ModelMeasure
     generator_name.setDefaultValue('Generator Obj')
     args << generator_name
 
-    # Surface name for generator (dynamic choice argument)
-    gen_surf_name = OpenStudio::Measure::OSArgument.makeChoiceArgument('gen_surf_name', surf_names, true)
-    gen_surf_name.setDisplayName('PV Generator Surface Name')
-    args << gen_surf_name
+    # # Surface name for generator (dynamic choice argument)
+    # gen_surf_name = OpenStudio::Measure::OSArgument.makeChoiceArgument('gen_surf_name', surf_names, true)
+    # gen_surf_name.setDisplayName('PV Generator Surface Name')
+    # args << gen_surf_name
 
     
     ## PhotovoltaicPerformance:Simple
@@ -150,6 +150,12 @@ class AddPVT < OpenStudio::Measure::ModelMeasure
     pv_schedule_name = OpenStudio::Measure::OSArgument.makeChoiceArgument('pv_schedule_name', schedule_names, false)
     pv_schedule_name.setDisplayName('PV Schedule Name')
     args << pv_schedule_name
+
+    # Storage Tank Volume
+    storage_vol = OpenStudio::Measure::OSArgument.makeDoubleArgument('storage_vol', true)
+    storage_vol.setDisplayName('Storage Tank Volume (m3)')
+    storage_vol.setDefaultValue(0.19)
+    args << storage_vol
  
 
     return args
@@ -175,11 +181,12 @@ class AddPVT < OpenStudio::Measure::ModelMeasure
     schedule_name = runner.getStringArgumentValue('schedule_name', user_arguments)
     fron_surf_emittance = runner.getDoubleArgumentValue('fron_surf_emittance', user_arguments)
     generator_name = runner.getStringArgumentValue('generator_name', user_arguments)
-    gen_surf_name = runner.getStringArgumentValue('gen_surf_name', user_arguments)
+    # gen_surf_name = runner.getStringArgumentValue('gen_surf_name', user_arguments)
     frac_surf_area_with_pv = runner.getDoubleArgumentValue('frac_surf_area_with_pv', user_arguments)
     conversion_eff = runner.getStringArgumentValue('conversion_eff', user_arguments)
     conversion_eff_val = runner.getDoubleArgumentValue('conversion_eff_val', user_arguments)
     pv_schedule_name = runner.getStringArgumentValue('pv_schedule_name', user_arguments)
+    storage_vol = runner.getDoubleArgumentValue('storage_vol', user_arguments)
 
 
     # Validate selected surface
@@ -198,13 +205,13 @@ class AddPVT < OpenStudio::Measure::ModelMeasure
     end
     schedule = schedule.get
 
-    # Validate PV Generator selected surface
-    gen_surface = model.getSurfaceByName(gen_surf_name)
-    if gen_surface.empty?
-      runner.registerError("The selected surface '#{gen_surf_name}' was not found in the model.")
-      return false
-    end
-    gen_surface = gen_surface.get
+    # # Validate PV Generator selected surface
+    # gen_surface = model.getSurfaceByName(gen_surf_name)
+    # if gen_surface.empty?
+    #   runner.registerError("The selected surface '#{gen_surf_name}' was not found in the model.")
+    #   return false
+    # end
+    # gen_surface = gen_surface.get
 
     # Validate selected PV Generator schedule
     gen_schedule = model.getScheduleByName(pv_schedule_name)
@@ -220,10 +227,10 @@ class AddPVT < OpenStudio::Measure::ModelMeasure
     if not plant_loops.empty?
       plant_loop = plant_loops.get
     end
-    plant_supply_out_node = plant_loop.supplyOutletNode
-    plant_supply_in_node = plant_loop.supplyInletNode
-    runner.registerInfo("The plantloop supply outlet nodes are #{plant_supply_out_node}")
-    runner.registerInfo("The plantloop supply inlet nodes are #{plant_supply_in_node}")
+    # plant_supply_out_node = plant_loop.supplyOutletNode
+    # plant_supply_in_node = plant_loop.supplyInletNode
+    runner.registerInfo("The Plant Loop object is #{plant_loop.nameString}")
+    # runner.registerInfo("The plantloop supply inlet nodes are #{plant_supply_in_node}")
 
 
     # Airloop Outdoor Air nodes
@@ -243,23 +250,42 @@ class AddPVT < OpenStudio::Measure::ModelMeasure
     # Placeholder for creating a PVT object
     runner.registerInfo("Creating a PVT object named '#{obj_name}' on surface '#{surf_name}' using schedule '#{schedule_name}'.")
     # Placeholder for creating a PVT object
-    runner.registerInfo("Creating a PV Generator object named '#{generator_name}' on surface '#{gen_surf_name}' using schedule '#{pv_schedule_name}'.")
+    runner.registerInfo("Creating a PV Generator object named '#{generator_name}' on surface '#{surf_name}' using schedule '#{pv_schedule_name}'.")
     
     # Register initial and final condition
     runner.registerInitialCondition("A PVT object named '#{obj_name}' will use schedule '#{schedule_name}'.")
+
 
     ## Creating PVT object
     #https://openstudio-sdk-documentation.s3.amazonaws.com/cpp/OpenStudio-1.11.0-doc/utilities_idd/html/classopenstudio_1_1_solar_collector___flat_plate___photovoltaic_thermal_fields.html
     
     pv_collector = OpenStudio::Model::SolarCollectorFlatPlatePhotovoltaicThermal.new(model)
-    plant_loop.addSupplyBranchForComponent(pv_collector)
+    # plant_loop.addSupplyBranchForComponent(pv_collector)
     pv_collector.setName(obj_name)
     pv_collector.setSurface(pvt_surface)
-    pv_collector.addToNode(outdoorAirNode)
+
+    if work_fluid == "Air"
+      pv_collector.addToNode(outdoorAirNode)
+      runner.registerInfo("PV Collector added to Outdoor Airloop Ventilation")
+    else
+      plant_loop.addSupplyBranchForComponent(pv_collector)
+      runner.registerInfo("PV Collector added to Plant Loop Storage")
+    end
+
+    # Adding a heater connected to PVT
+    storage_water_heater = OpenStudio::Model::WaterHeaterMixed.new(model)
+    storage_water_heater.setName('Storage Hot Water Tank')
+    storage_water_heater.setTankVolume(storage_vol)
+    # storage_water_heater.setSetpointTemperatureSchedule(storage_temp_sch)
+    storage_water_heater.setHeaterMaximumCapacity(0.0)
+    # storage_water_heater.setDeadbandTemperatureDifference(OpenStudio.convert(3.6,'R','K').get)
+    # storage_water_heater.setHeaterControlType('Cycle')
+    # storage_water_heater.setTankVolume(OpenStudio.convert(water_heater_vol_gal,'gal','m^3').get)
+    plant_loop.addSupplyBranchForComponent(storage_water_heater)
  
     # create the pv_generator
     pv_generator = OpenStudio::Model::GeneratorPhotovoltaic.simple(model)
-    pv_generator.setSurface(gen_surface)
+    pv_generator.setSurface(pvt_surface)
     # create the inverter
     inverter = OpenStudio::Model::ElectricLoadCenterInverterSimple.new(model)
     # create the distribution system
