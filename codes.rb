@@ -234,11 +234,16 @@ class AddPVT < OpenStudio::Measure::ModelMeasure
     if not plant_loops.empty?
       plant_loop = plant_loops.get
     end
-    # plant_supply_out_node = plant_loop.supplyOutletNode
-    # plant_supply_in_node = plant_loop.supplyInletNode
     runner.registerInfo("The Plant Loop object is #{plant_loop.nameString}")
-    # runner.registerInfo("The plantloop supply inlet nodes are #{plant_supply_in_node}")
 
+    # WaterHeaterMixed nodes
+    plant_components = plant_loop.supplyComponents('OS:WaterHeater:Mixed'.to_IddObjectType)
+    water_heater = plant_components.first.to_WaterHeaterMixed.get
+    swh_outlet_node = water_heater.useSideOutletModelObject.get.to_Node.get
+    swh_inlet_node = water_heater.useSideInletModelObject.get.to_Node.get
+    runner.registerInfo("The water heater outlet node is #{swh_outlet_node.nameString}")
+    runner.registerInfo("The water heater inlet node is #{swh_inlet_node.nameString}")
+    
 
     # Airloop Outdoor Air nodes
     oa_loops = model.getAirLoopHVACOutdoorAirSystemByName(air_loop_name.chomp)
@@ -270,9 +275,7 @@ class AddPVT < OpenStudio::Measure::ModelMeasure
     storage_water_heater = OpenStudio::Model::WaterHeaterMixed.new(model)
     storage_water_heater.setName('Storage Hot Water Tank')
     storage_water_heater.setTankVolume(storage_vol)
-    # storage_water_heater.setSetpointTemperatureSchedule(storage_temp_sch)
     storage_water_heater.setHeaterMaximumCapacity(0.0)
-
 
     # Adding the PVT collector 
     pv_collector = OpenStudio::Model::SolarCollectorFlatPlatePhotovoltaicThermal.new(model)
