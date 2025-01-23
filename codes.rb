@@ -52,11 +52,23 @@ class AddPVT < OpenStudio::Measure::ModelMeasure
     work_fluid.setDisplayName('Working fluid type (Air or Water)')
     args << work_fluid
 
+    # Name of the Plant Loop 
+    plant_loop_name = OpenStudio::Measure::OSArgument.makeStringArgument('plant_loop_name', true)
+    plant_loop_name.setDisplayName('Existing Plant Loop Name')
+    plant_loop_name.setDefaultValue("HTR WTR Loop")
+    args << plant_loop_name
+
+    # Name of the AirLoop HVAC Outdoor Air
+    air_loop_name = OpenStudio::Measure::OSArgument.makeStringArgument('air_loop_name', true)
+    air_loop_name.setDisplayName('Existing AirLoop HVAC Outdoor Air Name')
+    air_loop_name.setDefaultValue("Outdoor Air System")
+    args << air_loop_name
+    
     # Design flow rate
-    wf_dfrate = OpenStudio::Measure::OSArgument.makeDoubleArgument('wf_dfrate', true)
-    wf_dfrate.setDisplayName('Design flow rate (m3/s)')
-    wf_dfrate.setDefaultValue(0.00005)
-    args << wf_dfrate
+    design_flow_rate = OpenStudio::Measure::OSArgument.makeDoubleArgument('design_flow_rate', true)
+    design_flow_rate.setDisplayName('Design flow rate (m3/s)')
+    design_flow_rate.setDefaultValue(0.00005)
+    args << design_flow_rate
 
 
     ## SolarCollectorPerformance:PhotovoltaicThermal:Simple
@@ -173,7 +185,7 @@ class AddPVT < OpenStudio::Measure::ModelMeasure
     obj_name = runner.getStringArgumentValue('obj_name', user_arguments)
     surf_name = runner.getStringArgumentValue('surf_name', user_arguments)
     work_fluid = runner.getStringArgumentValue('work_fluid', user_arguments)
-    wf_design_flowrate = runner.getDoubleArgumentValue('wf_dfrate', user_arguments)
+    wf_design_flowrate = runner.getDoubleArgumentValue('design_flow_rate', user_arguments)
     per_name = runner.getStringArgumentValue('per_name', user_arguments)
     fract_of_surface = runner.getDoubleArgumentValue('fract_of_surface', user_arguments)
     therm_eff = runner.getStringArgumentValue('therm_eff', user_arguments)
@@ -187,6 +199,8 @@ class AddPVT < OpenStudio::Measure::ModelMeasure
     conversion_eff_val = runner.getDoubleArgumentValue('conversion_eff_val', user_arguments)
     pv_schedule_name = runner.getStringArgumentValue('pv_schedule_name', user_arguments)
     storage_vol = runner.getDoubleArgumentValue('storage_vol', user_arguments)
+    plant_loop_name = runner.getStringArgumentValue('plant_loop_name', user_arguments)
+    air_loop_name = runner.getStringArgumentValue('air_loop_name', user_arguments)
 
 
     # Validate selected surface
@@ -205,13 +219,6 @@ class AddPVT < OpenStudio::Measure::ModelMeasure
     end
     schedule = schedule.get
 
-    # # Validate PV Generator selected surface
-    # gen_surface = model.getSurfaceByName(gen_surf_name)
-    # if gen_surface.empty?
-    #   runner.registerError("The selected surface '#{gen_surf_name}' was not found in the model.")
-    #   return false
-    # end
-    # gen_surface = gen_surface.get
 
     # Validate selected PV Generator schedule
     gen_schedule = model.getScheduleByName(pv_schedule_name)
@@ -223,7 +230,7 @@ class AddPVT < OpenStudio::Measure::ModelMeasure
 
 
     # PlantLoop nodes
-    plant_loops = model.getPlantLoopByName("HTR WTR Loop")
+    plant_loops = model.getPlantLoopByName(plant_loop_name.chomp)
     if not plant_loops.empty?
       plant_loop = plant_loops.get
     end
@@ -234,7 +241,7 @@ class AddPVT < OpenStudio::Measure::ModelMeasure
 
 
     # Airloop Outdoor Air nodes
-    oa_loops = model.getAirLoopHVACOutdoorAirSystemByName("Outdoor Air System")
+    oa_loops = model.getAirLoopHVACOutdoorAirSystemByName(air_loop_name.chomp)
     if not oa_loops.empty?
       oa_loop = oa_loops.get
       outdoorAirNodes = oa_loop.outboardOANode
@@ -259,6 +266,15 @@ class AddPVT < OpenStudio::Measure::ModelMeasure
     ## Creating PVT object
     #https://openstudio-sdk-documentation.s3.amazonaws.com/cpp/OpenStudio-1.11.0-doc/utilities_idd/html/classopenstudio_1_1_solar_collector___flat_plate___photovoltaic_thermal_fields.html
     
+    # Adding a heater connected to PVT
+    storage_water_heater = OpenStudio::Model::WaterHeaterMixed.new(model)
+    storage_water_heater.setName('Storage Hot Water Tank')
+    storage_water_heater.setTankVolume(storage_vol)
+    # storage_water_heater.setSetpointTemperatureSchedule(storage_temp_sch)
+    storage_water_heater.setHeaterMaximumCapacity(0.0)
+
+
+    # Adding the PVT collector 
     pv_collector = OpenStudio::Model::SolarCollectorFlatPlatePhotovoltaicThermal.new(model)
     # plant_loop.addSupplyBranchForComponent(pv_collector)
     pv_collector.setName(obj_name)
@@ -269,20 +285,11 @@ class AddPVT < OpenStudio::Measure::ModelMeasure
       runner.registerInfo("PV Collector added to Outdoor Airloop Ventilation")
     else
       plant_loop.addSupplyBranchForComponent(pv_collector)
+      plant_loop.addSupplyBranchForComponent(storage_water_heater)
       runner.registerInfo("PV Collector added to Plant Loop Storage")
     end
 
-    # Adding a heater connected to PVT
-    storage_water_heater = OpenStudio::Model::WaterHeaterMixed.new(model)
-    storage_water_heater.setName('Storage Hot Water Tank')
-    storage_water_heater.setTankVolume(storage_vol)
-    # storage_water_heater.setSetpointTemperatureSchedule(storage_temp_sch)
-    storage_water_heater.setHeaterMaximumCapacity(0.0)
-    # storage_water_heater.setDeadbandTemperatureDifference(OpenStudio.convert(3.6,'R','K').get)
-    # storage_water_heater.setHeaterControlType('Cycle')
-    # storage_water_heater.setTankVolume(OpenStudio.convert(water_heater_vol_gal,'gal','m^3').get)
-    plant_loop.addSupplyBranchForComponent(storage_water_heater)
- 
+
     # create the pv_generator
     pv_generator = OpenStudio::Model::GeneratorPhotovoltaic.simple(model)
     pv_generator.setSurface(pvt_surface)
