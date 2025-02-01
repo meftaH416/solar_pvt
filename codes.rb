@@ -236,14 +236,21 @@ class AddPVT < OpenStudio::Measure::ModelMeasure
     end
     runner.registerInfo("The Plant Loop object is #{plant_loop.nameString}")
 
-    # WaterHeaterMixed nodes
-    plant_components = plant_loop.supplyComponents('OS:WaterHeater:Mixed'.to_IddObjectType)
-    water_heater = plant_components.first.to_WaterHeaterMixed.get
-    swh_outlet_node = water_heater.useSideOutletModelObject.get.to_Node.get
-    swh_inlet_node = water_heater.useSideInletModelObject.get.to_Node.get
-    runner.registerInfo("The water heater outlet node is #{swh_outlet_node.nameString}")
-    runner.registerInfo("The water heater inlet node is #{swh_inlet_node.nameString}")
-    
+    # Retrieve all WaterHeaterMixed objects in the model
+    water_heaters = model.getWaterHeaterMixeds
+    if water_heaters.empty?
+      runner.registerError('No WaterHeaterMixed objects found in the model.')
+      return false
+    end
+    water_heater = water_heaters.first
+    runner.registerInfo("Water heater retrieved: #{water_heater.nameString}")
+
+    # Existing WaterHeaterMixed Removed
+    # plant_components = plant_loop.supplyComponents('OS:WaterHeater:Mixed'.to_IddObjectType)
+    # plant_component = plant_components.first.to_WaterHeaterMixed.get
+    # plant_loop.removeSupplyBranchWithComponent(plant_component)
+    # runner.registerInfo("#{plant_component.nameString} is removed from branch")
+
 
     # Airloop Outdoor Air nodes
     oa_loops = model.getAirLoopHVACOutdoorAirSystemByName(air_loop_name.chomp)
@@ -287,11 +294,29 @@ class AddPVT < OpenStudio::Measure::ModelMeasure
       pv_collector.addToNode(outdoorAirNode)
       runner.registerInfo("PV Collector added to Outdoor Airloop Ventilation")
     else
-      plant_loop.addSupplyBranchForComponent(pv_collector)
+      # plant_loop.addSupplyBranchForComponent(pv_collector)
       plant_loop.addSupplyBranchForComponent(storage_water_heater)
-      runner.registerInfo("PV Collector added to Plant Loop Storage")
+      storage_inlet_node = ""
+      storage_outlet_node = ""
+      # WaterHeaterMixed nodes
+      plant_loop.supplyComponents('OS:WaterHeater:Mixed'.to_IddObjectType).each do |storage_obj|
+        runner.registerInfo("Storage tank name is #{storage_obj.nameString}")
+        water_storage = storage_obj.to_WaterHeaterMixed.get
+
+        if water_storage.nameString == "Storage Hot Water Tank"
+          storage_outlet_node = water_storage.useSideOutletModelObject.get.to_Node.get
+          storage_inlet_node = water_storage.useSideInletModelObject.get.to_Node.get
+          runner.registerInfo("The water storage outlet node is #{storage_outlet_node.nameString}")
+          runner.registerInfo("The water storage inlet node is #{storage_inlet_node.nameString}")
+        end
+      end
+      pv_collector.addToNode(storage_inlet_node)
+      runner.registerInfo("PV Collector added to Plant Loop Storage at #{storage_inlet_node.nameString}")
     end
 
+    # Adding the initial water heater
+    # plant_loop.addSupplyBranchForComponent(water_heater)
+    # runner.registerInfo("Water heater added back: #{water_heater.nameString}")
 
     # create the pv_generator
     pv_generator = OpenStudio::Model::GeneratorPhotovoltaic.simple(model)
