@@ -236,15 +236,15 @@ class AddPVT < OpenStudio::Measure::ModelMeasure
     end
     runner.registerInfo("The Plant Loop object is #{plant_loop.nameString}")
 
-    # Retrieve all WaterHeaterMixed objects in the model
-    # This water heater will later be added to plant loop
-    water_heaters = model.getWaterHeaterMixeds
-    if water_heaters.empty?
-      runner.registerError('No WaterHeaterMixed objects found in the model.')
-      return false
-    end
-    water_heater = water_heaters.first
-    runner.registerInfo("Water heater retrieved: #{water_heater.nameString}")
+    # # Retrieve all WaterHeaterMixed objects in the model
+    # # This water heater will later be added to plant loop
+    # water_heaters = model.getWaterHeaterMixeds
+    # if water_heaters.empty?
+    #   runner.registerError('No WaterHeaterMixed objects found in the model.')
+    #   return false
+    # end
+    # water_heater = water_heaters.first
+    # runner.registerInfo("Water heater retrieved: #{water_heater.nameString}")
 
     # Airloop Outdoor Air nodes
     oa_loops = model.getAirLoopHVACOutdoorAirSystemByName(air_loop_name.chomp)
@@ -277,16 +277,65 @@ class AddPVT < OpenStudio::Measure::ModelMeasure
     pv_collector.setName(obj_name)
     pv_collector.setSurface(pvt_surface)
 
+    # Condition whether Air or Water system should be added
     if work_fluid == "Air"
       pv_collector.addToNode(outdoorAirNode)
       runner.registerInfo("PV Collector added to Outdoor Airloop Ventilation")
     else
-      # Existing WaterHeaterMixed Removed. Here the water heater component earlier saved as OS component is 
-      # retrived as IDD component to remove.
-      plant_components = plant_loop.supplyComponents('OS:WaterHeater:Mixed'.to_IddObjectType)
-      plant_component = plant_components.first.to_WaterHeaterMixed.get
-      plant_loop.removeSupplyBranchWithComponent(plant_component)
-      runner.registerInfo("PlantLoop component named #{plant_component.nameString} is removed from branch")
+      
+      water_heater = nil
+      plant_loop.supplyComponents.each do |component|
+        if component.to_WaterHeaterMixed.is_initialized
+          water_heater = component.to_WaterHeaterMixed.get
+          runner.registerInfo("Water heater retrieved: #{water_heater.nameString}")
+          break
+        end
+      end
+
+      if water_heater.nil?
+        runner.registerError("No WaterHeaterMixed object found in the plant loop.")
+        return false
+      end
+
+      # Clone the water heater so that it can be re-added
+      cloned_water_heater = water_heater.clone(model).to_WaterHeaterMixed.get
+      runner.registerInfo("Cloned water heater: #{cloned_water_heater.name}")
+
+
+
+      # Find the pump object
+      water_pump = nil
+      plant_loop.supplyComponents.each do |component|
+        if component.to_PumpVariableSpeed.is_initialized
+          water_pump = component.to_PumpVariableSpeed.get
+          runner.registerInfo("Pump retrieved: #{water_pump.nameString}")
+
+          # Clone the water heater so that it can be re-added
+          cloned_water_pump = water_pump.clone(model).to_PumpVariableSpeed.get
+          runner.registerInfo("Cloned water pump: #{cloned_water_pump.name}")
+          break
+        elsif component.to_PumpConstantSpeed.is_initialized
+          water_pump = component.to_PumpConstantSpeed.get
+          runner.registerInfo("Pump retrieved: #{water_pump.nameString}")
+
+          # Clone the water heater so that it can be re-added
+          cloned_water_pump = water_pump.clone(model).to_PumpConstantSpeed.get
+          runner.registerInfo("Cloned water pump: #{cloned_water_pump.name}")
+          break
+        end
+      end
+
+      if water_pump.nil?
+        runner.registerError("No pump object found in the plant loop.")
+        return false
+      end
+
+
+      # Check if the water heater is already connected to a branch
+      if water_heater.plantLoop.is_initialized
+        runner.registerWarning("Water heater is already connected to a plant loop. Removing it first.")
+        plant_loop.removeSupplyBranchWithComponent(water_heater)
+      end
 
 
       # Adding a new storage connected to plantloop
@@ -297,6 +346,7 @@ class AddPVT < OpenStudio::Measure::ModelMeasure
 
       # plant_loop.addSupplyBranchForComponent(pv_collector)
       plant_loop.addSupplyBranchForComponent(storage_water_heater)
+
       storage_inlet_node = ""
       storage_outlet_node = ""
       # WaterHeaterMixed nodes
@@ -313,11 +363,12 @@ class AddPVT < OpenStudio::Measure::ModelMeasure
       end
       pv_collector.addToNode(storage_inlet_node)
       runner.registerInfo("PV Collector added to Plant Loop Storage at #{storage_inlet_node.nameString}")
+
+      # Add the cloned water heater object back to a parallel branch
+      plant_loop.addSupplyBranchForComponent(cloned_water_heater)
+      runner.registerInfo("#{cloned_water_heater.nameString} re-added in parallel to the storage object.")
     end
 
-    # Adding the initial water heater
-    # plant_loop.addSupplyBranchForComponent(water_heater)
-    # runner.registerInfo("Water heater added back: #{water_heater.nameString}")
 
     # create the pv_generator
     pv_generator = OpenStudio::Model::GeneratorPhotovoltaic.simple(model)
