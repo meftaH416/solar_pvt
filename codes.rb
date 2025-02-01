@@ -237,6 +237,7 @@ class AddPVT < OpenStudio::Measure::ModelMeasure
     runner.registerInfo("The Plant Loop object is #{plant_loop.nameString}")
 
     # Retrieve all WaterHeaterMixed objects in the model
+    # This water heater will later be added to plant loop
     water_heaters = model.getWaterHeaterMixeds
     if water_heaters.empty?
       runner.registerError('No WaterHeaterMixed objects found in the model.')
@@ -244,13 +245,6 @@ class AddPVT < OpenStudio::Measure::ModelMeasure
     end
     water_heater = water_heaters.first
     runner.registerInfo("Water heater retrieved: #{water_heater.nameString}")
-
-    # Existing WaterHeaterMixed Removed
-    # plant_components = plant_loop.supplyComponents('OS:WaterHeater:Mixed'.to_IddObjectType)
-    # plant_component = plant_components.first.to_WaterHeaterMixed.get
-    # plant_loop.removeSupplyBranchWithComponent(plant_component)
-    runner.registerInfo("PlantLoop component named #{plant_component.nameString} is removed from branch")
-
 
     # Airloop Outdoor Air nodes
     oa_loops = model.getAirLoopHVACOutdoorAirSystemByName(air_loop_name.chomp)
@@ -265,7 +259,6 @@ class AddPVT < OpenStudio::Measure::ModelMeasure
     end
     runner.registerInfo("The outdoor air supply node is #{outdoorAirNode.nameString}")
 
-
     # Placeholder for creating a PVT object
     runner.registerInfo("Creating a PVT object named '#{obj_name}' on surface '#{surf_name}' using schedule '#{schedule_name}'.")
     # Placeholder for creating a PVT object
@@ -277,12 +270,6 @@ class AddPVT < OpenStudio::Measure::ModelMeasure
 
     ## Creating PVT object
     #https://openstudio-sdk-documentation.s3.amazonaws.com/cpp/OpenStudio-1.11.0-doc/utilities_idd/html/classopenstudio_1_1_solar_collector___flat_plate___photovoltaic_thermal_fields.html
-    
-    # Adding a heater connected to PVT
-    storage_water_heater = OpenStudio::Model::WaterHeaterMixed.new(model)
-    storage_water_heater.setName('Storage Hot Water Tank')
-    storage_water_heater.setTankVolume(storage_vol)
-    storage_water_heater.setHeaterMaximumCapacity(0.0)
 
     # Adding the PVT collector 
     pv_collector = OpenStudio::Model::SolarCollectorFlatPlatePhotovoltaicThermal.new(model)
@@ -294,6 +281,20 @@ class AddPVT < OpenStudio::Measure::ModelMeasure
       pv_collector.addToNode(outdoorAirNode)
       runner.registerInfo("PV Collector added to Outdoor Airloop Ventilation")
     else
+      # Existing WaterHeaterMixed Removed. Here the water heater component earlier saved as OS component is 
+      # retrived as IDD component to remove.
+      plant_components = plant_loop.supplyComponents('OS:WaterHeater:Mixed'.to_IddObjectType)
+      plant_component = plant_components.first.to_WaterHeaterMixed.get
+      plant_loop.removeSupplyBranchWithComponent(plant_component)
+      runner.registerInfo("PlantLoop component named #{plant_component.nameString} is removed from branch")
+
+
+      # Adding a new storage connected to plantloop
+      storage_water_heater = OpenStudio::Model::WaterHeaterMixed.new(model)
+      storage_water_heater.setName('Storage Hot Water Tank')
+      storage_water_heater.setTankVolume(storage_vol)
+      storage_water_heater.setHeaterMaximumCapacity(0.0)
+
       # plant_loop.addSupplyBranchForComponent(pv_collector)
       plant_loop.addSupplyBranchForComponent(storage_water_heater)
       storage_inlet_node = ""
