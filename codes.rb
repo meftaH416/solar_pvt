@@ -249,7 +249,7 @@ class AddPVT < OpenStudio::Measure::ModelMeasure
     # plant_components = plant_loop.supplyComponents('OS:WaterHeater:Mixed'.to_IddObjectType)
     # plant_component = plant_components.first.to_WaterHeaterMixed.get
     # plant_loop.removeSupplyBranchWithComponent(plant_component)
-    # runner.registerInfo("#{plant_component.nameString} is removed from branch")
+    runner.registerInfo("PlantLoop component named #{plant_component.nameString} is removed from branch")
 
 
     # Airloop Outdoor Air nodes
