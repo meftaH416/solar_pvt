@@ -70,6 +70,11 @@ class AddPVT < OpenStudio::Measure::ModelMeasure
     design_flow_rate.setDefaultValue(0.00005)
     args << design_flow_rate
 
+    # Node to add Storage Tank to Primary Plant Loop 
+    node_storage_tank = OpenStudio::Measure::OSArgument.makeStringArgument('node_storage_tank', true)
+    node_storage_tank.setDisplayName('Node to add Storage Tank to Primary Plant Loop')
+    node_storage_tank.setDefaultValue("Node 1")
+    args << node_storage_tank
 
     ## SolarCollectorPerformance:PhotovoltaicThermal:Simple
 
@@ -128,11 +133,6 @@ class AddPVT < OpenStudio::Measure::ModelMeasure
     generator_name.setDefaultValue('Generator Obj')
     args << generator_name
 
-    # # Surface name for generator (dynamic choice argument)
-    # gen_surf_name = OpenStudio::Measure::OSArgument.makeChoiceArgument('gen_surf_name', surf_names, true)
-    # gen_surf_name.setDisplayName('PV Generator Surface Name')
-    # args << gen_surf_name
-
     
     ## PhotovoltaicPerformance:Simple
 
@@ -168,10 +168,11 @@ class AddPVT < OpenStudio::Measure::ModelMeasure
     storage_vol.setDisplayName('Storage Tank Volume (m3)')
     storage_vol.setDefaultValue(0.19)
     args << storage_vol
- 
 
     return args
   end
+
+
 
   def run(model, runner, user_arguments)
     super(model, runner, user_arguments) # Do **NOT** remove this line
@@ -186,6 +187,7 @@ class AddPVT < OpenStudio::Measure::ModelMeasure
     surf_name = runner.getStringArgumentValue('surf_name', user_arguments)
     work_fluid = runner.getStringArgumentValue('work_fluid', user_arguments)
     wf_design_flowrate = runner.getDoubleArgumentValue('design_flow_rate', user_arguments)
+    node_storage_tank = runner.getStringArgumentValue('node_storage_tank', user_arguments)
     per_name = runner.getStringArgumentValue('per_name', user_arguments)
     fract_of_surface = runner.getDoubleArgumentValue('fract_of_surface', user_arguments)
     therm_eff = runner.getStringArgumentValue('therm_eff', user_arguments)
@@ -219,7 +221,6 @@ class AddPVT < OpenStudio::Measure::ModelMeasure
     end
     schedule = schedule.get
 
-
     # Validate selected PV Generator schedule
     gen_schedule = model.getScheduleByName(pv_schedule_name)
     if gen_schedule.empty?
@@ -228,23 +229,12 @@ class AddPVT < OpenStudio::Measure::ModelMeasure
     end
     gen_schedule = gen_schedule.get
 
-
     # PlantLoop nodes
     plant_loops = model.getPlantLoopByName(plant_loop_name.chomp)
     if not plant_loops.empty?
       plant_loop = plant_loops.get
     end
     runner.registerInfo("The Plant Loop object is #{plant_loop.nameString}")
-
-    # # Retrieve all WaterHeaterMixed objects in the model
-    # # This water heater will later be added to plant loop
-    # water_heaters = model.getWaterHeaterMixeds
-    # if water_heaters.empty?
-    #   runner.registerError('No WaterHeaterMixed objects found in the model.')
-    #   return false
-    # end
-    # water_heater = water_heaters.first
-    # runner.registerInfo("Water heater retrieved: #{water_heater.nameString}")
 
     # Airloop Outdoor Air nodes
     oa_loops = model.getAirLoopHVACOutdoorAirSystemByName(air_loop_name.chomp)
@@ -258,15 +248,12 @@ class AddPVT < OpenStudio::Measure::ModelMeasure
 
     end
     runner.registerInfo("The outdoor air supply node is #{outdoorAirNode.nameString}")
-
     # Placeholder for creating a PVT object
     runner.registerInfo("Creating a PVT object named '#{obj_name}' on surface '#{surf_name}' using schedule '#{schedule_name}'.")
     # Placeholder for creating a PVT object
     runner.registerInfo("Creating a PV Generator object named '#{generator_name}' on surface '#{surf_name}' using schedule '#{pv_schedule_name}'.")
-    
     # Register initial and final condition
     runner.registerInitialCondition("A PVT object named '#{obj_name}' will use schedule '#{schedule_name}'.")
-
 
     ## Creating PVT object
     #https://openstudio-sdk-documentation.s3.amazonaws.com/cpp/OpenStudio-1.11.0-doc/utilities_idd/html/classopenstudio_1_1_solar_collector___flat_plate___photovoltaic_thermal_fields.html
@@ -282,29 +269,9 @@ class AddPVT < OpenStudio::Measure::ModelMeasure
       pv_collector.addToNode(outdoorAirNode)
       runner.registerInfo("PV Collector added to Outdoor Airloop Ventilation")
     else
-      
-      water_heater = nil
-      plant_loop.supplyComponents.each do |component|
-        if component.to_WaterHeaterMixed.is_initialized
-          water_heater = component.to_WaterHeaterMixed.get
-          runner.registerInfo("Water heater retrieved: #{water_heater.nameString}")
-          break
-        end
-      end
-
-      if water_heater.nil?
-        runner.registerError("No WaterHeaterMixed object found in the plant loop.")
-        return false
-      end
-
-      # Clone the water heater so that it can be re-added
-      cloned_water_heater = water_heater.clone(model).to_WaterHeaterMixed.get
-      runner.registerInfo("Cloned water heater: #{cloned_water_heater.name}")
-
-
-
       # Find the pump object
       water_pump = nil
+      cloned_water_pump = ""
       plant_loop.supplyComponents.each do |component|
         if component.to_PumpVariableSpeed.is_initialized
           water_pump = component.to_PumpVariableSpeed.get
@@ -330,13 +297,16 @@ class AddPVT < OpenStudio::Measure::ModelMeasure
         return false
       end
 
+      # New plant loop
+      new_plant_loop = OpenStudio::Model::PlantLoop.new(model)
+      new_plant_loop.setName('New Plant Loop')
 
-      # Check if the water heater is already connected to a branch
-      if water_heater.plantLoop.is_initialized
-        runner.registerWarning("Water heater is already connected to a plant loop. Removing it first.")
-        plant_loop.removeSupplyBranchWithComponent(water_heater)
-      end
+      # Add the pump to new plant loop
+      cloned_water_pump.addToNode(new_plant_loop.supplyInletNode)
 
+      # Add the PV collector to the new plant loop
+      new_plant_loop.addSupplyBranchForComponent(pv_collector)
+      runner.registerInfo("#{pv_collector.nameString} added to Plant Loop Storage at #{new_plant_loop.nameString}")
 
       # Adding a new storage connected to plantloop
       storage_water_heater = OpenStudio::Model::WaterHeaterMixed.new(model)
@@ -344,31 +314,29 @@ class AddPVT < OpenStudio::Measure::ModelMeasure
       storage_water_heater.setTankVolume(storage_vol)
       storage_water_heater.setHeaterMaximumCapacity(0.0)
 
-      # plant_loop.addSupplyBranchForComponent(pv_collector)
-      plant_loop.addSupplyBranchForComponent(storage_water_heater)
-
-      storage_inlet_node = ""
-      storage_outlet_node = ""
-      # WaterHeaterMixed nodes
-      plant_loop.supplyComponents('OS:WaterHeater:Mixed'.to_IddObjectType).each do |storage_obj|
-        runner.registerInfo("Storage tank name is #{storage_obj.nameString}")
-        water_storage = storage_obj.to_WaterHeaterMixed.get
-
-        if water_storage.nameString == "Storage Hot Water Tank"
-          storage_outlet_node = water_storage.useSideOutletModelObject.get.to_Node.get
-          storage_inlet_node = water_storage.useSideInletModelObject.get.to_Node.get
-          runner.registerInfo("The water storage outlet node is #{storage_outlet_node.nameString}")
-          runner.registerInfo("The water storage inlet node is #{storage_inlet_node.nameString}")
-        end
+      # Add setpoint manager
+      storage_setpoint_managers = model.getSetpointManagerScheduledByName("Service hot water setpoint manager")
+      if storage_setpoint_managers.empty?
+        runner.registerError("SetpointManagerScheduled not found")
+        return false
+      else
+        storage_setpoint_manager = storage_setpoint_managers.get
+        runner.registerInfo("Setpoint manager for Plant Loop control #{storage_setpoint_manager.nameString}.")
       end
-      pv_collector.addToNode(storage_inlet_node)
-      runner.registerInfo("PV Collector added to Plant Loop Storage at #{storage_inlet_node.nameString}")
+      # Clone the setpoint manager to add new plant loop
+      cloned_setpoint_manager = storage_setpoint_manager.clone(model).to_SetpointManagerScheduled.get
+      cloned_setpoint_manager.addToNode(new_plant_loop.supplyOutletNode)
+      runner.registerInfo("Service hot water setpoint manager added to the supply outlet node of #{new_plant_loop.nameString}.")
 
-      # Add the cloned water heater object back to a parallel branch
-      plant_loop.addSupplyBranchForComponent(cloned_water_heater)
-      runner.registerInfo("#{cloned_water_heater.nameString} re-added in parallel to the storage object.")
+      # Add storage water to demand side of new plant loop
+      new_plant_loop.addDemandBranchForComponent(storage_water_heater)
+      runner.registerInfo("#{storage_water_heater.nameString} added to the demand side of new plant loop.")
+
+      # Add storage water to existing supply side node of plant loop (primary)
+      node_storage_tank = model.getNodeByName("Node 1").get
+      storage_water_heater.addToNode(node_storage_tank)
+      runner.registerInfo("#{storage_water_heater.nameString} added to node #{node_storage_tank.nameString}.")
     end
-
 
     # create the pv_generator
     pv_generator = OpenStudio::Model::GeneratorPhotovoltaic.simple(model)
