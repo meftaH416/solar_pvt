@@ -5,8 +5,6 @@
 
 # frozen_string_literal: true
 
-require 'csv'
-
 class AddPVT < OpenStudio::Measure::ModelMeasure
 
   def name
@@ -14,11 +12,16 @@ class AddPVT < OpenStudio::Measure::ModelMeasure
   end
 
   def description
-    return 'Testing codes'
+    return 'This measure will add solar PhotoVoltaicThermal object to the system. PVT system can be add to airloop outdoor air system or plant loop'
   end
 
   def modeler_description
-    return 'Testing codes for different idd object'
+    return 'Solar PhotoVoltaicThermal object generate electricity and supply thermal energy. In order use thermal energy to heat water,
+    a Plant Loop must be created. The emply plant loop will contain a Pump to the supply inlet node, SetpointManagerSchedule object to supply outlet node
+    and a water heating object to supply outlet. This Measure will create a Secondry Plant Loop that will contain a PV Collector to supply inlet, then a Pump,
+    then a Storage Tank and the same SetpointManagerSchedule.
+    
+    The Storage Tank to secondary loop will be added to demand side of Primary Plant Loop'
   end
 
   def arguments(model)
@@ -296,11 +299,11 @@ class AddPVT < OpenStudio::Measure::ModelMeasure
         return false
       end
 
-      # New plant loop
+      # Secondary plant loop
       new_plant_loop = OpenStudio::Model::PlantLoop.new(model)
-      new_plant_loop.setName('New Plant Loop')
+      new_plant_loop.setName('Secondary Plant Loop')
 
-      # Add the PV collector to the new plant loop
+      # Add the PV collector to the Secondary plant loop
       pv_collector.addToNode(new_plant_loop.supplyInletNode)
       runner.registerInfo("#{pv_collector.nameString} added to Plant Loop Storage at #{new_plant_loop.nameString}")
 
@@ -324,14 +327,14 @@ class AddPVT < OpenStudio::Measure::ModelMeasure
         storage_setpoint_manager = storage_setpoint_managers.get
         runner.registerInfo("Setpoint manager for Plant Loop control #{storage_setpoint_manager.nameString}.")
       end
-      # Clone the setpoint manager to add new plant loop
+      # Clone the setpoint manager to add Secondary plant loop
       cloned_setpoint_manager = storage_setpoint_manager.clone(model).to_SetpointManagerScheduled.get
       cloned_setpoint_manager.addToNode(new_plant_loop.supplyOutletNode)
       runner.registerInfo("Service hot water setpoint manager added to the supply outlet node of #{new_plant_loop.nameString}.")
 
-      # Add storage water to demand side of new plant loop
+      # Add storage water to demand side of Secondary plant loop
       new_plant_loop.addDemandBranchForComponent(storage_water_heater)
-      runner.registerInfo("#{storage_water_heater.nameString} added to the demand side of new plant loop.")
+      runner.registerInfo("#{storage_water_heater.nameString} added to the demand side of Secondary plant loop.")
 
       # Add storage water to existing supply side node of plant loop (primary)
       node_storage_tank = model.getNodeByName("Node 1").get
