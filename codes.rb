@@ -100,7 +100,7 @@ class AddSolarPVT < OpenStudio::Measure::ModelMeasure
     chs << "Scheduled"
     therm_eff = OpenStudio::Measure::OSArgument::makeChoiceArgument('therm_eff', chs, true)
     therm_eff.setDefaultValue("Fixed")
-    therm_eff.setDisplayName('Thermal Conversion Eﬀiciency Input Mode Type')
+    therm_eff.setDisplayName('Thermal Conversion Eﬀiciency Input Mode (Currently only Fixed)')
     args << therm_eff
 
     # Value for Thermal Conversion Eﬀiciency if Fixed
@@ -110,16 +110,16 @@ class AddSolarPVT < OpenStudio::Measure::ModelMeasure
     ther_eff_val.setDefaultValue(0.20)
     args << ther_eff_val
 
-    # Name of Schedule for Thermal Conversion Eﬀiciency
-    schedules = model.getSchedules
-    schedule_names = OpenStudio::StringVector.new
-    schedules.each do |schedule|
-      schedule_names << schedule.nameString
-    end
+    # # Name of Schedule for Thermal Conversion Eﬀiciency
+    # schedules = model.getSchedules
+    # schedule_names = OpenStudio::StringVector.new
+    # schedules.each do |schedule|
+    #   schedule_names << schedule.nameString
+    # end
 
-    schedule_name = OpenStudio::Measure::OSArgument.makeChoiceArgument('schedule_name', schedule_names, false)
-    schedule_name.setDisplayName('Schedule Name for Thermal Conversion Eﬀiciency')
-    args << schedule_name
+    # schedule_name = OpenStudio::Measure::OSArgument.makeChoiceArgument('schedule_name', schedule_names, false)
+    # schedule_name.setDisplayName('Schedule Name for Thermal Conversion Eﬀiciency')
+    # args << schedule_name
 
     # Front Surface Emittance
     front_surf_emittance = OpenStudio::Measure::OSArgument.makeDoubleArgument('front_surf_emittance', true)
@@ -150,7 +150,7 @@ class AddSolarPVT < OpenStudio::Measure::ModelMeasure
     chs1 << "Fixed"
     chs1 << "Scheduled"
     conversion_eff = OpenStudio::Measure::OSArgument::makeChoiceArgument('conversion_eff', chs1, true)
-    conversion_eff.setDisplayName('Thermal Conversion Eﬀiciency Input Mode Type')
+    conversion_eff.setDisplayName('Thermal Conversion Eﬀiciency Input Mode (currently Fixed only)')
     conversion_eff.setDefaultValue("Fixed")
     args << conversion_eff
 
@@ -161,10 +161,10 @@ class AddSolarPVT < OpenStudio::Measure::ModelMeasure
     conversion_eff_val.setDefaultValue(0.3)
     args << conversion_eff_val
 
-    # Name of Schedule for Conversion Eﬀiciency
-    pv_schedule_name = OpenStudio::Measure::OSArgument.makeChoiceArgument('pv_schedule_name', schedule_names, false)
-    pv_schedule_name.setDisplayName('PV Schedule Name')
-    args << pv_schedule_name
+    # # Name of Schedule for Conversion Eﬀiciency
+    # pv_schedule_name = OpenStudio::Measure::OSArgument.makeChoiceArgument('pv_schedule_name', schedule_names, false)
+    # pv_schedule_name.setDisplayName('PV Schedule Name')
+    # args << pv_schedule_name
 
     # Storage Tank Volume
     storage_vol = OpenStudio::Measure::OSArgument.makeDoubleArgument('storage_vol', true)
@@ -195,13 +195,13 @@ class AddSolarPVT < OpenStudio::Measure::ModelMeasure
     fract_of_surface = runner.getDoubleArgumentValue('fract_of_surface', user_arguments)
     therm_eff = runner.getStringArgumentValue('therm_eff', user_arguments)
     ther_eff_val = runner.getDoubleArgumentValue('ther_eff_val', user_arguments)
-    schedule_name = runner.getStringArgumentValue('schedule_name', user_arguments)
+    # schedule_name = runner.getStringArgumentValue('schedule_name', user_arguments)
     front_surf_emittance = runner.getDoubleArgumentValue('front_surf_emittance', user_arguments)
     generator_name = runner.getStringArgumentValue('generator_name', user_arguments)
     frac_surf_area_with_pv = runner.getDoubleArgumentValue('frac_surf_area_with_pv', user_arguments)
     conversion_eff = runner.getStringArgumentValue('conversion_eff', user_arguments)
     conversion_eff_val = runner.getDoubleArgumentValue('conversion_eff_val', user_arguments)
-    pv_schedule_name = runner.getStringArgumentValue('pv_schedule_name', user_arguments)
+    # pv_schedule_name = runner.getStringArgumentValue('pv_schedule_name', user_arguments)
     storage_vol = runner.getDoubleArgumentValue('storage_vol', user_arguments)
     plant_loop_name = runner.getStringArgumentValue('plant_loop_name', user_arguments)
     air_loop_name = runner.getStringArgumentValue('air_loop_name', user_arguments)
@@ -214,22 +214,6 @@ class AddSolarPVT < OpenStudio::Measure::ModelMeasure
       return false
     end
     pvt_surface = pvt_surfaces.get
-
-    # Validate selected schedule
-    schedule = model.getScheduleByName(schedule_name)
-    if schedule.empty?
-      runner.registerError("The selected schedule '#{schedule_name}' was not found in the model.")
-      return false
-    end
-    schedule = schedule.get
-
-    # Validate selected PV Generator schedule
-    gen_schedule = model.getScheduleByName(pv_schedule_name)
-    if gen_schedule.empty?
-      runner.registerError("The selected schedule '#{pv_schedule_name}' was not found in the model.")
-      return false
-    end
-    gen_schedule = gen_schedule.get
 
     # PlantLoop nodes
     plant_loops = model.getPlantLoopByName(plant_loop_name.chomp)
@@ -251,11 +235,11 @@ class AddSolarPVT < OpenStudio::Measure::ModelMeasure
     end
     runner.registerInfo("The outdoor air supply node is #{outdoorAirNode.nameString}")
     # Placeholder for creating a PVT object
-    runner.registerInfo("Creating a PVT object named '#{obj_name}' on surface '#{surf_name}' using schedule '#{schedule_name}'.")
+    runner.registerInfo("Creating a PVT object named '#{obj_name}' on surface '#{surf_name}'.")
     # Placeholder for creating a PVT object
-    runner.registerInfo("Creating a PV Generator object named '#{generator_name}' on surface '#{surf_name}' using schedule '#{pv_schedule_name}'.")
+    runner.registerInfo("Creating a PV Generator object named '#{generator_name}' on surface '#{surf_name}'.")
     # Register initial and final condition
-    runner.registerInitialCondition("A PVT object named '#{obj_name}' will use schedule '#{schedule_name}'.")
+    runner.registerInitialCondition("A PVT object named '#{obj_name}'.")
 
     ## Creating PVT object
     #https://openstudio-sdk-documentation.s3.amazonaws.com/cpp/OpenStudio-1.11.0-doc/utilities_idd/html/classopenstudio_1_1_solar_collector___flat_plate___photovoltaic_thermal_fields.html
@@ -363,7 +347,7 @@ class AddSolarPVT < OpenStudio::Measure::ModelMeasure
     pv_collector_performance.setThermalConversionEfficiency(ther_eff_val)
     pv_collector_performance.setFrontSurfaceEmittance(front_surf_emittance)
 
-    runner.registerFinalCondition("PVT object named '#{obj_name}' successfully added to surface '#{surf_name}' with schedule '#{schedule_name}'.")
+    runner.registerFinalCondition("PVT object named '#{obj_name}' successfully added to surface '#{surf_name}'.")
 
     ## Set output variables 
     outputVariablePVT = false
