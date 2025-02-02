@@ -5,10 +5,10 @@
 
 # frozen_string_literal: true
 
-class AddPVT < OpenStudio::Measure::ModelMeasure
+class AddSolarPVT < OpenStudio::Measure::ModelMeasure
 
   def name
-    return 'AddPVT'
+    return 'AddSolarPVT'
   end
 
   def description
@@ -31,7 +31,7 @@ class AddPVT < OpenStudio::Measure::ModelMeasure
 
     # Name of the object
     obj_name = OpenStudio::Measure::OSArgument.makeStringArgument('obj_name', true)
-    obj_name.setDisplayName('Uniquie Name for the PVT object')
+    obj_name.setDisplayName('Name for the PVT object')
     obj_name.setDefaultValue('Solar PhotoVoltaic Thermal Obj')
     args << obj_name
     
@@ -378,4 +378,4 @@ class AddPVT < OpenStudio::Measure::ModelMeasure
 end
 
 # Register the measure to be used by the application
-AddPVT.new.registerWithApplication
+AddSolarPVT.new.registerWithApplication
