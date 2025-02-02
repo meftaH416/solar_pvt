@@ -67,10 +67,10 @@ class AddPVT < OpenStudio::Measure::ModelMeasure
     # Design flow rate
     design_flow_rate = OpenStudio::Measure::OSArgument.makeDoubleArgument('design_flow_rate', true)
     design_flow_rate.setDisplayName('Design flow rate (m3/s)')
-    design_flow_rate.setDefaultValue(0.00005)
+    design_flow_rate.setDefaultValue(0.00004)
     args << design_flow_rate
 
-    # Node to add Storage Tank to Primary Plant Loop 
+    # Node to add Storage Tank to Primary Plant Loop  
     node_storage_tank = OpenStudio::Measure::OSArgument.makeStringArgument('node_storage_tank', true)
     node_storage_tank.setDisplayName('Node to add Storage Tank to Primary Plant Loop')
     node_storage_tank.setDefaultValue("Node 1")
@@ -115,15 +115,15 @@ class AddPVT < OpenStudio::Measure::ModelMeasure
     end
 
     schedule_name = OpenStudio::Measure::OSArgument.makeChoiceArgument('schedule_name', schedule_names, false)
-    schedule_name.setDisplayName('Schedule Name')
+    schedule_name.setDisplayName('Schedule Name for Thermal Conversion Eﬀiciency')
     args << schedule_name
 
     # Front Surface Emittance
-    fron_surf_emittance = OpenStudio::Measure::OSArgument.makeDoubleArgument('fron_surf_emittance', true)
-    fron_surf_emittance.setDisplayName('Front Surface Emittance')
-    fron_surf_emittance.setUnits('fraction')
-    fron_surf_emittance.setDefaultValue(0.90)
-    args << fron_surf_emittance
+    front_surf_emittance = OpenStudio::Measure::OSArgument.makeDoubleArgument('front_surf_emittance', true)
+    front_surf_emittance.setDisplayName('Front Surface Emittance')
+    front_surf_emittance.setUnits('fraction')
+    front_surf_emittance.setDefaultValue(0.90)
+    args << front_surf_emittance
 
 
     ## Generator:Photovoltaic
@@ -193,9 +193,8 @@ class AddPVT < OpenStudio::Measure::ModelMeasure
     therm_eff = runner.getStringArgumentValue('therm_eff', user_arguments)
     ther_eff_val = runner.getDoubleArgumentValue('ther_eff_val', user_arguments)
     schedule_name = runner.getStringArgumentValue('schedule_name', user_arguments)
-    fron_surf_emittance = runner.getDoubleArgumentValue('fron_surf_emittance', user_arguments)
+    front_surf_emittance = runner.getDoubleArgumentValue('front_surf_emittance', user_arguments)
     generator_name = runner.getStringArgumentValue('generator_name', user_arguments)
-    # gen_surf_name = runner.getStringArgumentValue('gen_surf_name', user_arguments)
     frac_surf_area_with_pv = runner.getDoubleArgumentValue('frac_surf_area_with_pv', user_arguments)
     conversion_eff = runner.getStringArgumentValue('conversion_eff', user_arguments)
     conversion_eff_val = runner.getDoubleArgumentValue('conversion_eff_val', user_arguments)
@@ -301,12 +300,14 @@ class AddPVT < OpenStudio::Measure::ModelMeasure
       new_plant_loop = OpenStudio::Model::PlantLoop.new(model)
       new_plant_loop.setName('New Plant Loop')
 
-      # Add the pump to new plant loop
+      # Add the PV collector to the new plant loop
+      pv_collector.addToNode(new_plant_loop.supplyInletNode)
+      runner.registerInfo("#{pv_collector.nameString} added to Plant Loop Storage at #{new_plant_loop.nameString}")
+
+      # Add the pump to outlet node of collector
+      pv_collector_outlet_node = pv_collector.outletModelObject.get.to_Node.get
       cloned_water_pump.addToNode(new_plant_loop.supplyInletNode)
 
-      # Add the PV collector to the new plant loop
-      new_plant_loop.addSupplyBranchForComponent(pv_collector)
-      runner.registerInfo("#{pv_collector.nameString} added to Plant Loop Storage at #{new_plant_loop.nameString}")
 
       # Adding a new storage connected to plantloop
       storage_water_heater = OpenStudio::Model::WaterHeaterMixed.new(model)
@@ -357,7 +358,7 @@ class AddPVT < OpenStudio::Measure::ModelMeasure
     pv_collector_performance.setFractionOfSurfaceAreaWithActiveThermalCollector(fract_of_surface)
     # pv_collector_performance.setThermalConversionEﬀiciencyInputMode(therm_eff)
     pv_collector_performance.setThermalConversionEfficiency(ther_eff_val)
-    pv_collector_performance.setFrontSurfaceEmittance(fron_surf_emittance)
+    pv_collector_performance.setFrontSurfaceEmittance(front_surf_emittance)
 
     runner.registerFinalCondition("PVT object named '#{obj_name}' successfully added to surface '#{surf_name}' with schedule '#{schedule_name}'.")
 
