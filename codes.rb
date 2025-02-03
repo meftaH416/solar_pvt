@@ -8,22 +8,18 @@
 class AddSolarPVT < OpenStudio::Measure::ModelMeasure
 
   def name
-    return 'AddSolarPVT'
+    return "AddSolarPVT"
   end
-
   def description
-    return 'This measure will add solar PhotoVoltaicThermal object to the system. PVT system can be add to airloop outdoor air system or plant loop'
+    return "This measure will add solar PhotoVoltaicThermal object to the system. PVT system can be add to airloop outdoor air system or plant loop"
   end
-
   def modeler_description
-    return 'Solar PhotoVoltaicThermal object generate electricity and supply thermal energy. In order use thermal energy to heat water,
+    return "Solar PhotoVoltaicThermal object generate electricity and supply thermal energy. In order use thermal energy to heat water,
     a Plant Loop must be created. The emply plant loop will contain a Pump to the supply inlet node, SetpointManagerSchedule object to supply outlet node
     and a water heating object to supply outlet. This Measure will create a Secondry Plant Loop that will contain a PV Collector to supply inlet, then a Pump,
     then a Storage Tank and the same SetpointManagerSchedule.
-    
-    The Storage Tank to secondary loop will be added to demand side of Primary Plant Loop'
+    The Storage Tank to secondary loop will be added to demand side of Primary Plant Loop"
   end
-
   def arguments(model)
     args = OpenStudio::Measure::OSArgumentVector.new
 
@@ -44,6 +40,7 @@ class AddSolarPVT < OpenStudio::Measure::ModelMeasure
 
     surf_name = OpenStudio::Measure::OSArgument.makeChoiceArgument('surf_name', surf_names, true)
     surf_name.setDisplayName('Surface Name')
+    surf_name.setDefaultValue(surf_names[1])  # Set the first surface name as the default value
     args << surf_name
 
     # Working fluid type
